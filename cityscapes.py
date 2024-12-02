@@ -5,8 +5,13 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from PIL import Image
+from PIL import ImageDraw
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
+import cv2
+import json
+from glob import glob
+from tqdm import tqdm
 
 np.random.seed(3)
 
@@ -19,7 +24,6 @@ def show_mask(mask, ax, random_color=False, borders = True):
     mask = mask.astype(np.uint8)
     mask_image =  mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     if borders:
-        import cv2
         contours, _ = cv2.findContours(mask,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) 
         # Try to smooth contours
         contours = [cv2.approxPolyDP(contour, epsilon=0.01, closed=True) for contour in contours]
@@ -56,35 +60,149 @@ def show_masks(image, masks, scores, point_coords=None, box_coords=None, input_l
 checkpoint = "checkpoints/sam2.1_hiera_large.pt"
 model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
 predictor = SAM2ImagePredictor(build_sam2(model_cfg, checkpoint))
-image = Image.open("cityscapes_dataset/leftImg8bit/val/frankfurt/frankfurt_000000_000576_leftImg8bit.png")
+# image = Image.open("cityscapes_dataset/leftImg8bit/val/frankfurt/frankfurt_000000_000576_leftImg8bit.png")
 
-predictor.set_image(image)
-input_boxes = np.array([
-    [75, 275, 1725, 850],
-    [425, 600, 700, 875],
-    [1375, 550, 1650, 800],
-    [1240, 675, 1400, 750],
-])
-masks, scores, _ = predictor.predict(
-    point_coords=None,
-    point_labels=None,
-    box=input_boxes,
-    multimask_output=False,
-)
+# predictor.set_image(image)
+# input_boxes = np.array([
+#     [75, 275, 1725, 850],
+#     [425, 600, 700, 875],
+#     [1375, 550, 1650, 800],
+#     [1240, 675, 1400, 750],
+# ])
+# masks, scores, _ = predictor.predict(
+#     point_coords=None,
+#     point_labels=None,
+#     box=input_boxes,
+#     multimask_output=False,
+# )
 
 # Can run on a batch of images at the same time!
 # img_batch = [image1, image2]
 # boxes_batch = [image1_boxes, image2_boxes]
 # predictor.set_image_batch(img_batch)
 
-plt.figure(figsize=(10, 10))
-plt.imshow(image)
-for mask in masks:
-    show_mask(mask.squeeze(0), plt.gca(), random_color=True)
-for box in input_boxes:
-    show_box(box, plt.gca())
-plt.axis('off')
-plt.show()
+# Get all image file paths in the validation set
+image_paths = glob(os.path.join('cityscapes_dataset', 'leftImg8bit', 'val', '*', '*_leftImg8bit.png'))
+i = 0
+for img_path in tqdm(image_paths):
+    # Load image
+    image = Image.open(img_path)
+    predictor.set_image(image)
+    
+    # Construct the corresponding annotation file path
+    ann_path = img_path.replace('_leftImg8bit.png', '_gtFine_polygons.json').replace('leftImg8bit', 'gtFine')
+    
+    # Load annotations
+    with open(ann_path, 'r') as f:
+        data = json.load(f)
+    
+    # Extract polygons and convert them to bounding boxes
+    input_boxes = []
+    for obj in data['objects']:
+        if obj['label'] in ['sky', 'road']:
+            continue
+        polygon = obj['polygon']
+        xs = [point[0] for point in polygon]
+        ys = [point[1] for point in polygon]
+        x_min = min(xs)
+        y_min = min(ys)
+        x_max = max(xs)
+        y_max = max(ys)
+        input_boxes.append([x_min, y_min, x_max, y_max])
+    
+    input_boxes = np.array(input_boxes)
+    
+    # Run prediction
+    masks, scores, _ = predictor.predict(
+        point_coords=None,
+        point_labels=None,
+        box=input_boxes,
+        multimask_output=False,
+    )
+    
+    # Optionally, save or display the results
+    # For example, save the masks as a PNG image
+    result_dir = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'val')
+    mask_path = os.path.join(result_dir, os.path.basename(img_path).replace('.png', '_masks.png'))
+    
+    # Visualize and save the results using the show_masks function
+    # plt.figure(figsize=(10, 10))
+    # plt.imshow(image)
+    # for mask in masks:
+    #     show_mask(mask.squeeze(0), plt.gca(), random_color=True)
+    # plt.axis('off')
+    # plt.show()
+    # plt.savefig(mask_path)
+
+    # Initialize a list to store ground truth masks
+    gt_masks = []
+
+    # Create ground truth masks from polygons
+    for obj in data['objects']:
+        polygon = [tuple(point) for point in obj['polygon']]
+        mask = Image.new('L', image.size, 0)
+        ImageDraw.Draw(mask).polygon(polygon, outline=1, fill=1)
+        gt_mask = np.array(mask)
+        gt_masks.append(gt_mask)
+
+    # Compute IoUs between predicted masks and ground truth masks
+    image_iou_results = []
+
+    for pred_mask, gt_mask in zip(masks, gt_masks):
+        pred_mask = pred_mask.squeeze().astype(bool)
+        gt_mask = gt_mask.astype(bool)
+        intersection = np.logical_and(pred_mask, gt_mask).sum()
+        union = np.logical_or(pred_mask, gt_mask).sum()
+        iou = intersection / union if union != 0 else 0
+        image_iou_results.append(iou)
+
+    # Collect IoUs for this image
+    if 'iou_results' not in locals():
+        iou_results = []
+    iou_results.append({
+        'image': img_path,
+        'ious': image_iou_results
+    })
+
+    # Save IoU results to a JSON file with each image's information on a new line
+    result_json_path = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'hiera_large.json')
+    with open(result_json_path, 'a') as f:
+        f.write(json.dumps(iou_results[-1]) + '\n')
+        # Initialize a dictionary to store IoUs for each category
+        category_ious = {}
+
+        # Iterate over all objects to categorize IoUs
+        for obj, iou in zip(data['objects'], image_iou_results):
+            category = obj['label']
+            if category not in category_ious:
+                category_ious[category] = []
+            category_ious[category].append(iou)
+
+        # Calculate the average IoU for each category
+        average_category_ious = {category: np.mean(ious) for category, ious in category_ious.items()}
+
+        # Save the average IoU results to a JSON file
+        average_iou_json_path = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'average_iou.json')
+        with open(average_iou_json_path, 'w') as f:
+            json.dump(average_category_ious, f)
+
+    i += 1
+    if i >= 10:
+        break
+
+# # After processing all images, save the IoU results to a JSON file
+# result_json_path = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'hiera_large.json')
+# with open(result_json_path, 'w') as f:
+#     json.dump(iou_results, f)
+
+# plt.figure(figsize=(10, 10))
+# plt.imshow(image)
+# for mask in masks:
+#     show_mask(mask.squeeze(0), plt.gca(), random_color=True)
+# for box in input_boxes:
+#     show_box(box, plt.gca())
+# plt.axis('off')
+# plt.show()
 
 # input_point = np.array([[500, 375]])
 # input_label = np.array([1])
