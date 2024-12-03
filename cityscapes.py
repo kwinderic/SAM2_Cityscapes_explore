@@ -65,10 +65,13 @@ predictor = SAM2ImagePredictor(build_sam2(model_cfg, checkpoint))
 # Get all image file paths in the validation set
 image_paths = glob(os.path.join('cityscapes_dataset', 'leftImg8bit', 'val', '*', '*_leftImg8bit.png'))
 i = 0
+iou_results_all = []
+
+# Just for testing, process only the first 5 images
 for img_path in tqdm(image_paths):
-    # i += 1
-    # if i > 5:
-    #     break
+    i += 1
+    if i > 5:
+        break
     # Load image
     image = Image.open(img_path)
     predictor.set_image(image)
@@ -132,10 +135,11 @@ for img_path in tqdm(image_paths):
         }
         # print(iou_result)
         iou_results.append(iou_result)
+    iou_results_all.extend(iou_results)
 
-    # Save IoU results to a JSON file
+# Save IoU results to a JSON file
 with open('./cityscapes_dataset/results_t.json', 'w') as f:
-    json.dump(iou_results, f)
+    json.dump(iou_results_all, f)
 
     # print(masks.shape)
     # print(type(masks))
