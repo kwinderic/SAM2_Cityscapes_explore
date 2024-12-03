@@ -69,9 +69,9 @@ iou_results_all = []
 
 # Just for testing, process only the first 5 images
 for img_path in tqdm(image_paths):
-    i += 1
-    if i > 5:
-        break
+    # i += 1
+    # if i > 5:
+    #     break
     # Load image
     image = Image.open(img_path)
     predictor.set_image(image)
