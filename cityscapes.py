@@ -12,6 +12,7 @@ import cv2
 import json
 from glob import glob
 from tqdm import tqdm
+from pycocotools import mask as maskUtils
 
 np.random.seed(3)
 
@@ -57,34 +58,17 @@ def show_masks(image, masks, scores, point_coords=None, box_coords=None, input_l
         plt.axis('off')
         plt.show()
 
-checkpoint = "checkpoints/sam2.1_hiera_large.pt"
-model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+checkpoint = "checkpoints/sam2.1_hiera_tiny.pt"
+model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
 predictor = SAM2ImagePredictor(build_sam2(model_cfg, checkpoint))
-# image = Image.open("cityscapes_dataset/leftImg8bit/val/frankfurt/frankfurt_000000_000576_leftImg8bit.png")
-
-# predictor.set_image(image)
-# input_boxes = np.array([
-#     [75, 275, 1725, 850],
-#     [425, 600, 700, 875],
-#     [1375, 550, 1650, 800],
-#     [1240, 675, 1400, 750],
-# ])
-# masks, scores, _ = predictor.predict(
-#     point_coords=None,
-#     point_labels=None,
-#     box=input_boxes,
-#     multimask_output=False,
-# )
-
-# Can run on a batch of images at the same time!
-# img_batch = [image1, image2]
-# boxes_batch = [image1_boxes, image2_boxes]
-# predictor.set_image_batch(img_batch)
 
 # Get all image file paths in the validation set
 image_paths = glob(os.path.join('cityscapes_dataset', 'leftImg8bit', 'val', '*', '*_leftImg8bit.png'))
 i = 0
 for img_path in tqdm(image_paths):
+    # i += 1
+    # if i > 5:
+    #     break
     # Load image
     image = Image.open(img_path)
     predictor.set_image(image)
@@ -99,8 +83,8 @@ for img_path in tqdm(image_paths):
     # Extract polygons and convert them to bounding boxes
     input_boxes = []
     for obj in data['objects']:
-        if obj['label'] in ['sky', 'road']:
-            continue
+        # if obj['label'] in ['sky', 'road']:
+        #     continue
         polygon = obj['polygon']
         xs = [point[0] for point in polygon]
         ys = [point[1] for point in polygon]
@@ -119,11 +103,73 @@ for img_path in tqdm(image_paths):
         box=input_boxes,
         multimask_output=False,
     )
-    
+
+    num_masks, batch_size, H, W = masks.shape
+    # Initialize a list to store IoU results
+    iou_results = []
+
+    # Iterate over each ground truth object and corresponding predicted mask
+    for idx, obj in enumerate(data['objects']):
+        # Create ground truth mask from polygon
+        gt_polygon = [(int(x), int(y)) for x, y in obj['polygon']]
+        gt_mask = Image.new('L', image.size, 0)
+        ImageDraw.Draw(gt_mask).polygon(gt_polygon, outline=1, fill=1)
+        gt_mask = np.array(gt_mask).astype(bool)
+
+        # Get the predicted mask for this object
+        pred_mask = masks[idx, 0].astype(bool)
+
+        # Calculate Intersection over Union (IoU)
+        intersection = np.logical_and(gt_mask, pred_mask).sum()
+        union = np.logical_or(gt_mask, pred_mask).sum()
+        iou = intersection / union if union != 0 else 0
+
+        # Store the IoU result
+        iou_result = {
+            'image_id': img_path,
+            'object_id': obj,
+            'iou': iou
+        }
+        # print(iou_result)
+        iou_results.append(iou_result)
+
+    # Save IoU results to a JSON file
+with open('./cityscapes_dataset/results_t.json', 'w') as f:
+    json.dump(iou_results, f)
+
+    # print(masks.shape)
+    # print(type(masks))
+    # print(masks.ndim) 
+
+    # Extract the masks from the output
+#     predictions = []
+#     num_masks, batch_size, H, W = masks.shape
+#     for num in range(num_masks):
+#         mask = masks[num, 0, :, :]
+#         mask = np.asfortranarray(mask.astype(np.uint8))
+#         rle = maskUtils.encode(mask)
+
+#         if isinstance(rle['counts'], bytes):
+#             rle['counts'] = rle['counts'].decode('utf-8')
+
+#         area = maskUtils.area(rle)
+#         category_id = num
+
+#         prediction = {
+#             'image_id': img_path,
+#             'annotation_id': ann_path,
+#             'category_id': category_id,
+#             'segmentation': rle,
+#         }
+#         predictions.append(prediction)
+
+# with open('./cityscapes_dataset/predictions.json', 'w') as f:
+#     json.dump(predictions, f)
+
     # Optionally, save or display the results
     # For example, save the masks as a PNG image
-    result_dir = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'val')
-    mask_path = os.path.join(result_dir, os.path.basename(img_path).replace('.png', '_masks.png'))
+    # result_dir = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'val')
+    # mask_path = os.path.join(result_dir, os.path.basename(img_path).replace('.png', '_masks.png'))
     
     # Visualize and save the results using the show_masks function
     # plt.figure(figsize=(10, 10))
@@ -133,62 +179,6 @@ for img_path in tqdm(image_paths):
     # plt.axis('off')
     # plt.show()
     # plt.savefig(mask_path)
-
-    # Initialize a list to store ground truth masks
-    gt_masks = []
-
-    # Create ground truth masks from polygons
-    for obj in data['objects']:
-        polygon = [tuple(point) for point in obj['polygon']]
-        mask = Image.new('L', image.size, 0)
-        ImageDraw.Draw(mask).polygon(polygon, outline=1, fill=1)
-        gt_mask = np.array(mask)
-        gt_masks.append(gt_mask)
-
-    # Compute IoUs between predicted masks and ground truth masks
-    image_iou_results = []
-
-    for pred_mask, gt_mask in zip(masks, gt_masks):
-        pred_mask = pred_mask.squeeze().astype(bool)
-        gt_mask = gt_mask.astype(bool)
-        intersection = np.logical_and(pred_mask, gt_mask).sum()
-        union = np.logical_or(pred_mask, gt_mask).sum()
-        iou = intersection / union if union != 0 else 0
-        image_iou_results.append(iou)
-
-    # Collect IoUs for this image
-    if 'iou_results' not in locals():
-        iou_results = []
-    iou_results.append({
-        'image': img_path,
-        'ious': image_iou_results
-    })
-
-    # Save IoU results to a JSON file with each image's information on a new line
-    result_json_path = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'hiera_large.json')
-    with open(result_json_path, 'a') as f:
-        f.write(json.dumps(iou_results[-1]) + '\n')
-        # Initialize a dictionary to store IoUs for each category
-        category_ious = {}
-
-        # Iterate over all objects to categorize IoUs
-        for obj, iou in zip(data['objects'], image_iou_results):
-            category = obj['label']
-            if category not in category_ious:
-                category_ious[category] = []
-            category_ious[category].append(iou)
-
-        # Calculate the average IoU for each category
-        average_category_ious = {category: np.mean(ious) for category, ious in category_ious.items()}
-
-        # Save the average IoU results to a JSON file
-        average_iou_json_path = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'average_iou.json')
-        with open(average_iou_json_path, 'w') as f:
-            json.dump(average_category_ious, f)
-
-    i += 1
-    if i >= 10:
-        break
 
 # # After processing all images, save the IoU results to a JSON file
 # result_json_path = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'hiera_large.json')

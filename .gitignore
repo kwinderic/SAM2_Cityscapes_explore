@@ -8,3 +8,6 @@ build/*
 _C.*
 outputs/*
 checkpoints/*.pt
+cityscapes_dataset/*
+!cityscapes_dataset/average_iou*
+!cityscapes_dataset/results*
