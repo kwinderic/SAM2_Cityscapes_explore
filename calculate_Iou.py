@@ -20,6 +20,6 @@ def calculate_average_iou(input_path, output_path):
             file.write(f'Label {label}: Average IoU = {average_iou:.4f}\n')
 
 if __name__ == "__main__":
-    input_file = './cityscapes_dataset/results_s.json'
-    output_file = './cityscapes_dataset/average_iou_s.txt'
+    input_file = './cityscapes_dataset/results_b+.json'
+    output_file = './cityscapes_dataset/average_iou_b+.txt'
     calculate_average_iou(input_file, output_file)
