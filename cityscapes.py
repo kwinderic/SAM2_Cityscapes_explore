@@ -58,8 +58,8 @@ def show_masks(image, masks, scores, point_coords=None, box_coords=None, input_l
         plt.axis('off')
         plt.show()
 
-checkpoint = "checkpoints/sam2.1_hiera_tiny.pt"
-model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
+checkpoint = "checkpoints/sam2.1_hiera_large.pt"
+model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
 predictor = SAM2ImagePredictor(build_sam2(model_cfg, checkpoint))
 
 # Get all image file paths in the validation set
@@ -138,37 +138,8 @@ for img_path in tqdm(image_paths):
     iou_results_all.extend(iou_results)
 
 # Save IoU results to a JSON file
-with open('./cityscapes_dataset/results_t.json', 'w') as f:
+with open('./cityscapes_dataset/results_l.json', 'w') as f:
     json.dump(iou_results_all, f)
-
-    # print(masks.shape)
-    # print(type(masks))
-    # print(masks.ndim) 
-
-    # Extract the masks from the output
-#     predictions = []
-#     num_masks, batch_size, H, W = masks.shape
-#     for num in range(num_masks):
-#         mask = masks[num, 0, :, :]
-#         mask = np.asfortranarray(mask.astype(np.uint8))
-#         rle = maskUtils.encode(mask)
-
-#         if isinstance(rle['counts'], bytes):
-#             rle['counts'] = rle['counts'].decode('utf-8')
-
-#         area = maskUtils.area(rle)
-#         category_id = num
-
-#         prediction = {
-#             'image_id': img_path,
-#             'annotation_id': ann_path,
-#             'category_id': category_id,
-#             'segmentation': rle,
-#         }
-#         predictions.append(prediction)
-
-# with open('./cityscapes_dataset/predictions.json', 'w') as f:
-#     json.dump(predictions, f)
 
     # Optionally, save or display the results
     # For example, save the masks as a PNG image
