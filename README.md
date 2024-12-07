@@ -23,3 +23,6 @@ The evaluation code can be found in `cityscapes.py`, this will store the result 
 
 ### Calculate mIou
 By running `calculate_Iou.py`, it will read the result json file under `cityscapes_dataset` and calculate the mIou by labels and store the txt file under `cityscapes_dataset`.
+
+## Thanks
+Thans @[linden](https://github.com/linden713) for providing ideas.
