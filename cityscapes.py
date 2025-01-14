@@ -14,6 +14,8 @@ from glob import glob
 from tqdm import tqdm
 from pycocotools import mask as maskUtils
 
+torch.cuda.empty_cache()
+plt.ioff()
 np.random.seed(3)
 
 def show_mask(mask, ax, random_color=False, borders = True):
@@ -58,20 +60,24 @@ def show_masks(image, masks, scores, point_coords=None, box_coords=None, input_l
         plt.axis('off')
         plt.show()
 
-checkpoint = "checkpoints/sam2.1_hiera_base_plus.pt"
-model_cfg = "configs/sam2.1/sam2.1_hiera_b+.yaml"
+checkpoint = "checkpoints/sam2.1_hiera_tiny.pt"
+model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
 predictor = SAM2ImagePredictor(build_sam2(model_cfg, checkpoint))
 
-# Get all image file paths in the validation set
+# Get all image file paths in the validation set; 267 for frankfurt (choose 10:11), 59 for lindau (choose 278:279), 1525 for munster (415:416)
 image_paths = glob(os.path.join('cityscapes_dataset', 'leftImg8bit', 'val', '*', '*_leftImg8bit.png'))
 i = 0
 iou_results_all = []
 
+# import pdb
+# pdb.set_trace()
+
 # Just for testing, process only the first 5 images
-for img_path in tqdm(image_paths):
-    # i += 1
-    # if i > 5:
-    #     break
+for img_path in tqdm(image_paths[10:11]):
+    # pdb.set_trace()
+    i += 1
+    if i > 5:
+        break
     # Load image
     image = Image.open(img_path)
     predictor.set_image(image)
@@ -137,22 +143,27 @@ for img_path in tqdm(image_paths):
         iou_results.append(iou_result)
     iou_results_all.extend(iou_results)
 
+torch.cuda.empty_cache()
 # Save IoU results to a JSON file
+print("Saving results to JSON file...")
 with open('./cityscapes_dataset/results_b+.json', 'w') as f:
     json.dump(iou_results_all, f)
 
     # Optionally, save or display the results
     # For example, save the masks as a PNG image
-    # result_dir = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_large', 'val')
-    # mask_path = os.path.join(result_dir, os.path.basename(img_path).replace('.png', '_masks.png'))
+    result_dir = os.path.join('cityscapes_dataset', 'result_visual', 'hiera_tiny', 'val')
+    mask_path = os.path.join(result_dir, os.path.basename(img_path).replace('.png', '_masks.png'))
+    os.makedirs(os.path.dirname(mask_path), exist_ok=True)
     
+    # pdb.set_trace()
     # Visualize and save the results using the show_masks function
-    # plt.figure(figsize=(10, 10))
-    # plt.imshow(image)
-    # for mask in masks:
-    #     show_mask(mask.squeeze(0), plt.gca(), random_color=True)
-    # plt.axis('off')
-    # plt.show()
+    print("Visualizing and saving results...")
+    plt.figure(figsize=(10, 10))
+    plt.imshow(image)
+    for mask in masks:
+        show_mask(mask.squeeze(0), plt.gca(), random_color=True)
+    plt.axis('off')
+    plt.show()
     # plt.savefig(mask_path)
 
 # # After processing all images, save the IoU results to a JSON file

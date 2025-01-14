@@ -121,6 +121,8 @@ def add_pythonpath_to_sys_path():
 
 
 def main(args) -> None:
+    import pdb
+    pdb.set_trace()
     cfg = compose(config_name=args.config)
     if cfg.launcher.experiment_log_dir is None:
         cfg.launcher.experiment_log_dir = os.path.join(
