@@ -58,8 +58,14 @@ def show_masks(image, masks, scores, point_coords=None, box_coords=None, input_l
         plt.axis('off')
         plt.show()
 
-checkpoint = "checkpoints/sam2.1_hiera_base_plus.pt"
-model_cfg = "configs/sam2.1/sam2.1_hiera_b+.yaml"
+# checkpoint = "checkpoints/sam2.1_hiera_base_plus.pt"
+# model_cfg = "configs/sam2.1/sam2.1_hiera_b+.yaml"
+# checkpoint = "checkpoints/sam2.1_hiera_large.pt"
+# model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+# checkpoint = "checkpoints/sam2.1_hiera_small.pt"
+# model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
+checkpoint = "checkpoints/sam2.1_hiera_tiny.pt"
+model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
 predictor = SAM2ImagePredictor(build_sam2(model_cfg, checkpoint))
 
 # Get all image file paths in the validation set
@@ -138,7 +144,10 @@ for img_path in tqdm(image_paths):
     iou_results_all.extend(iou_results)
 
 # Save IoU results to a JSON file
-with open('./cityscapes_dataset/results_b+.json', 'w') as f:
+# with open('./cityscapes_dataset/results_b+.json', 'w') as f:
+# with open('./cityscapes_dataset/results_l.json', 'w') as f:
+# with open('./cityscapes_dataset/results_s.json', 'w') as f:
+with open('./cityscapes_dataset/results_t.json', 'w') as f:    
     json.dump(iou_results_all, f)
 
     # Optionally, save or display the results
